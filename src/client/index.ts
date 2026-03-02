@@ -5,7 +5,7 @@ import { clientWelcome, getInput, printClientHelp, printQuit } from "../internal
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove, handleMove } from "../internal/gamelogic/move.js";
 import { commandStatus } from "../internal/gamelogic/gamelogic.js";
-import { handlerPause, handlerMove } from "./handlers.js";
+import { handlerPause, handlerMove, handlerWar } from "./handlers.js";
 import { type PlayingState, GameState } from "../internal/gamelogic/gamestate.js";
 import { type ArmyMove } from "../internal/gamelogic/gamedata.js";
 
@@ -34,8 +34,17 @@ async function main() {
     `army_moves.${username}`,
     "army_moves.*",
     SimpleQueueType.Transient,
-    handlerMove(gs)
+    handlerMove(gs, ch)
   );
+
+  await subscribeJSON (
+    conn,
+    ExchangePerilTopic,
+    "war",
+    "war.*",
+    SimpleQueueType.Durable,
+    handlerWar(gs)
+  )
   
 
 

@@ -44,6 +44,9 @@ export async function declareAndBind(
         durable: queueType === SimpleQueueType.Durable,
         autoDelete: queueType === SimpleQueueType.Transient,
         exclusive: queueType === SimpleQueueType.Transient,
+        arguments: {
+          "x-dead-letter-exchange": "peril_dlx"
+        },
     };
 
     const queue = await ch.assertQueue(queueName, options);
@@ -58,7 +61,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
-  handler: (data: T) => AckType,
+  handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
   const [ch, queue] = await declareAndBind(
     conn,
