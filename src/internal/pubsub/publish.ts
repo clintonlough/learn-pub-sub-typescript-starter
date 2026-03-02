@@ -6,6 +6,12 @@ export enum SimpleQueueType {
   Transient,
 }
 
+export enum AckType {
+  Ack,
+  NackRequeue,
+  NackDiscard,
+}
+
 export function publishJSON<T>(
   ch: ConfirmChannel,
   exchange: string,
@@ -44,4 +50,45 @@ export async function declareAndBind(
     ch.bindQueue(queue.queue, exchange, key);
     
     return [ch, queue];
+}
+
+export async function subscribeJSON<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  key: string,
+  queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
+  handler: (data: T) => AckType,
+): Promise<void> {
+  const [ch, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType
+  );
+  await ch.consume(queue.queue,
+    (msg: amqp.ConsumeMessage | null) => {
+  // 1. Check if msg is null
+      if (msg === null) {
+        return;
+      }
+  // 2. Parse the content
+      const msgContent = JSON.parse(msg.content.toString());
+  // 3. Call the handler
+      const acknowledgment = handler(msgContent);
+  // 4. Acknowledge the message
+      if (acknowledgment === AckType.Ack) {
+        ch.ack(msg);
+        console.log("message acknowledged");
+      } else if (acknowledgment === AckType.NackRequeue) {
+        ch.nack(msg,false,true);
+        console.log("message failed, requeing");
+      } else if (acknowledgment === AckType.NackDiscard) {
+        ch.nack(msg,false,false);
+        console.log("message failed, discarding");
+      }
+      
+    }
+  );
 }

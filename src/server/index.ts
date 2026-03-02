@@ -1,6 +1,6 @@
 import amqp from "amqplib";
-import { publishJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { publishJSON, declareAndBind, SimpleQueueType } from "../internal/pubsub/publish.js";
+import { ExchangePerilDirect, PauseKey, ExchangePerilTopic, GameLogSlug } from "../internal/routing/routing.js";
 import { printServerHelp, getInput } from "../internal/gamelogic/gamelogic.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 
@@ -10,6 +10,15 @@ async function main() {
   const conn = await amqp.connect(rabbitConnString);
   console.log("Connection established successfully");
   const ch = await conn.createConfirmChannel();
+
+  const queue = declareAndBind(
+    conn, 
+    ExchangePerilTopic, 
+    GameLogSlug,
+    "game_logs.*", 
+    SimpleQueueType.Durable
+  );
+
   printServerHelp();
   
   while (true) {
