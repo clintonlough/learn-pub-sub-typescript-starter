@@ -1,6 +1,6 @@
 import amqp from "amqplib";
 import type { ConfirmChannel, Channel } from "amqplib";
-import { encode } from "@msgpack/msgpack";
+import { encode, decode } from "@msgpack/msgpack";
 
 export enum SimpleQueueType {
   Durable,
@@ -11,25 +11,6 @@ export enum AckType {
   Ack,
   NackRequeue,
   NackDiscard,
-}
-
-export function publishJSON<T>(
-  ch: ConfirmChannel,
-  exchange: string,
-  routingKey: string,
-  value: T,
-): Promise<void> {
-
-    const valueBytes = Buffer.from(JSON.stringify(value), "utf-8");
-    return new Promise((resolve, reject) => {
-        ch.publish(
-        exchange,
-        routingKey,
-        valueBytes,
-        { contentType: "application/json" },
-        (err) => (err ? reject(err) : resolve()),
-        );
-    });
 }
 
 export async function declareAndBind(
@@ -97,22 +78,42 @@ export async function subscribeJSON<T>(
   );
 }
 
-export function publishMsgPack<T>(
-  ch: ConfirmChannel,
+export async function subscribeMsgPack<T>(
+  conn: amqp.ChannelModel,
   exchange: string,
-  routingKey: string,
-  value: T,
+  queueName: string,
+  key: string,
+  queueType: SimpleQueueType, // an enum to represent "durable" or "transient"
+  handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
-  const encodedData: Uint8Array = encode({value: value});
-  const bufferData = Buffer.from(encodedData);
-  return new Promise((resolve, reject) => {
-        ch.publish(
-        exchange,
-        routingKey,
-        bufferData,
-        { contentType: "application/x-msgpack" },
-        (err) => (err ? reject(err) : resolve()),
-        );
-    });
+  const [ch, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType
+  );
+  ch.consume(queue.queue, (msg: amqp.ConsumeMessage | null) => {
+  if (msg === null) return;
 
+  const decoded = decode(msg.content) as any;
+
+  const msgContent = decoded.value ? decoded.value : decoded;
+  console.log("Decoded content:", msgContent);
+
+  // Handle the promise returned by the handler
+  Promise.resolve(handler(msgContent)).then((acknowledgment) => {
+    if (acknowledgment === AckType.Ack) {
+      ch.ack(msg);
+      console.log("message acknowledged");
+    } else if (acknowledgment === AckType.NackRequeue) {
+      ch.nack(msg, false, true);
+    } else if (acknowledgment === AckType.NackDiscard) {
+      ch.nack(msg, false, false);
+    }
+  }).catch((err) => {
+    console.error("Handler crashed:", err);
+    ch.nack(msg, false, false);
+  });
+});
 }

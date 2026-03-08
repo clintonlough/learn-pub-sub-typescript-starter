@@ -1,6 +1,7 @@
 import amqp from "amqplib";
-import { declareAndBind, publishJSON, SimpleQueueType, subscribeJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
+import { publishJSON, SimpleQueueType, publishMsgPack } from "../internal/pubsub/publish.js";
+import { declareAndBind, subscribeJSON } from "../internal/pubsub/consume.js";
+import { ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey } from "../internal/routing/routing.js";
 import { clientWelcome, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove, handleMove } from "../internal/gamelogic/move.js";
@@ -8,6 +9,8 @@ import { commandStatus } from "../internal/gamelogic/gamelogic.js";
 import { handlerPause, handlerMove, handlerWar } from "./handlers.js";
 import { type PlayingState, GameState } from "../internal/gamelogic/gamestate.js";
 import { type ArmyMove } from "../internal/gamelogic/gamedata.js";
+import { type ConfirmChannel } from "amqplib";
+import { type GameLog } from "../internal/gamelogic/logs.js";
 
 async function main() {
   console.log("Starting Peril server...");
@@ -43,7 +46,7 @@ async function main() {
     "war",
     "war.*",
     SimpleQueueType.Durable,
-    handlerWar(gs)
+    handlerWar(gs, ch)
   )
   
 
@@ -103,3 +106,14 @@ main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);
 });
+
+export async function publishGameLog(channel: ConfirmChannel, username: string, message: string): Promise<void> {
+  const gameLog: GameLog = {
+    username: username,
+    message: message,
+    currentTime: new Date()
+  };
+
+  console.log("PUBLISHING LOG:", gameLog); // Add this log!
+  publishMsgPack(channel, ExchangePerilTopic, `${GameLogSlug}.${username}`, gameLog);
+}
