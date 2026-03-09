@@ -93,6 +93,7 @@ export async function subscribeMsgPack<T>(
     key,
     queueType
   );
+  await ch.prefetch(10);
   ch.consume(queue.queue, (msg: amqp.ConsumeMessage | null) => {
   if (msg === null) return;
 

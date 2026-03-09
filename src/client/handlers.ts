@@ -115,14 +115,30 @@ export function handlerWar(gs: GameState, publishCh: ConfirmChannel): (rw: Recog
   };
 }
 
-export async function handlerWriteLog(log: GameLog) {
+export async function handlerWriteLog(data: any) {
     try {
-        console.log("gamelog received:", log);
-        console.log("currentTime type:", typeof log.currentTime, "value:", log.currentTime);
-        await writeLog(log);
+        // Log exactly what 'data' is to see the problematic message
+        if (!data || typeof data !== 'object' && typeof data !== 'string') {
+            console.log("Received malformed log data:", data);
+            return AckType.NackDiscard;
+        }
+
+        const logData: GameLog = {
+            username: data.username || "unknown",
+            message: data.message || (typeof data === 'string' ? data : "no message"),
+            // Use a fallback date if data.currentTime is missing or invalid
+            currentTime: data.currentTime ? new Date(data.currentTime) : new Date()
+        };
+
+        // Final check: if the Date is still invalid, use current time
+        if (isNaN(logData.currentTime.getTime())) {
+            logData.currentTime = new Date();
+        }
+
+        await writeLog(logData);
         return AckType.Ack;
     } catch (err) {
-        console.log("error writing log file... discarding", err);
+        console.log("error writing log file...", err);
         return AckType.NackDiscard;
     } finally {
         process.stdout.write("> ");

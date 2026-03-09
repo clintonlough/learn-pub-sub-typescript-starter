@@ -7,6 +7,7 @@ import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove, handleMove } from "../internal/gamelogic/move.js";
 import { commandStatus } from "../internal/gamelogic/gamelogic.js";
 import { handlerPause, handlerMove, handlerWar } from "./handlers.js";
+import { getMaliciousLog } from "../internal/gamelogic/gamelogic.js";
 import { type PlayingState, GameState } from "../internal/gamelogic/gamestate.js";
 import { type ArmyMove } from "../internal/gamelogic/gamedata.js";
 import { type ConfirmChannel } from "amqplib";
@@ -18,7 +19,15 @@ async function main() {
   const conn = await amqp.connect(rabbitConnString);
   console.log("Connection established successfully");
   const ch = await conn.createConfirmChannel();
-  const username = await clientWelcome();
+
+  let username = "";
+  //Check if its an interactive client and bypass if not.
+  if (process.stdin.isTTY) {
+      username = await clientWelcome();
+  } else {
+    // Provide default values or skip the prompt
+    username = `bot-${Math.floor(Math.random() * 1000000)}`;
+  }
 
   const gs = new GameState(username);
 
@@ -51,10 +60,18 @@ async function main() {
   
 
 
-
+if (process.stdin.isTTY) {
   // REPL loop
   while (true) {
-    const input = await getInput();
+    let input: string[] = [""];
+    //Check if its an interactive terminal
+    if (process.stdin.isTTY) {
+      input = await getInput();
+    } else {
+      // Provide default values or skip the prompt
+      input = ["default_user", "default_server"]; 
+    }
+
     if (input.length === 0) {
       continue;
     } else if (input[0] === 'spawn') {
@@ -84,7 +101,19 @@ async function main() {
       console.log("Showing help menu");
       printClientHelp();
     } else if (input[0] === 'spam') {
-      console.log("Spamming not allowed yet!");
+      if (input[1]) {
+        
+        const n = input[1] as unknown as number;
+        for (let i: number = 0; i < n; i++) {
+          const msg = getMaliciousLog();
+          publishMsgPack(
+            ch,
+            ExchangePerilTopic,
+            `game_logs.${username}`,
+            msg
+          );
+        }
+      }
     } else if (input[0] === 'quit') {
       printQuit();
       break;
@@ -93,7 +122,7 @@ async function main() {
     }
   }
 
-
+}
 
   process.on('SIGINT', () => {
     console.log('Client shutting down');
